@@ -21,7 +21,7 @@ object Smb {
             setProperty("jcifs.smb.client.maxVersion", "SMB311")
         }
         val base = BaseContext(PropertyConfiguration(props))
-        return if (user.isBlank()) base.withGuestCredentials()
+        return if (user.isBlank()) base.withCredentials(NtlmPasswordAuthenticator(null, "guest", ""))
         else base.withCredentials(NtlmPasswordAuthenticator(null, user, pass))
     }
 
