@@ -106,7 +106,7 @@ class CastController(
         return true
     }
 
-    fun toggle() { client?.togglePlayPause() }
+    fun toggle() { client?.togglePlayback() }
     fun stop() { cc?.sessionManager?.endCurrentSession(true) }
     fun release() { cc?.sessionManager?.removeSessionManagerListener(listener, CastSession::class.java); stopServer() }
 }
