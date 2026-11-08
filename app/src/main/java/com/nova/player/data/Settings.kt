@@ -32,6 +32,13 @@ data class Settings(
     val osApiKey: String = "",
     val osUser: String = "",
     val osPass: String = "",
+    val orientation: Int = 0,      // 0 auto-rotate, 1 always landscape, 2 match video
+    val subPosMode: Int = 1,       // 0 fixed, 1 auto (follow video aspect ratio)
+    val controlColor: Int = 0,     // 0 = theme colour, else ARGB
+    val seekColor: Int = 0,        // 0 = follow control colour, else ARGB
+    val whisperUrl: String = "https://api.openai.com/v1",
+    val whisperKey: String = "",
+    val whisperModel: String = "whisper-1",
 )
 
 fun subColorInt(i: Int) = intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFEB3B.toInt(), 0xFF80DEEA.toInt(), 0xFFA5D6A7.toInt()).getOrElse(i) { 0xFFFFFFFF.toInt() }
@@ -59,6 +66,13 @@ object K {
     val osKey = stringPreferencesKey("os_key")
     val osUser = stringPreferencesKey("os_user")
     val osPass = stringPreferencesKey("os_pass")
+    val orientation = intPreferencesKey("orientation")
+    val subPosMode = intPreferencesKey("sub_pos_mode")
+    val controlColor = intPreferencesKey("control_color")
+    val seekColor = intPreferencesKey("seek_color")
+    val whisperUrl = stringPreferencesKey("whisper_url")
+    val whisperKey = stringPreferencesKey("whisper_key")
+    val whisperModel = stringPreferencesKey("whisper_model")
 }
 
 class SettingsRepo(private val ctx: Context) {
@@ -86,6 +100,13 @@ class SettingsRepo(private val ctx: Context) {
             osApiKey = p[K.osKey] ?: d.osApiKey,
             osUser = p[K.osUser] ?: d.osUser,
             osPass = p[K.osPass] ?: d.osPass,
+            orientation = p[K.orientation] ?: d.orientation,
+            subPosMode = p[K.subPosMode] ?: d.subPosMode,
+            controlColor = p[K.controlColor] ?: d.controlColor,
+            seekColor = p[K.seekColor] ?: d.seekColor,
+            whisperUrl = p[K.whisperUrl] ?: d.whisperUrl,
+            whisperKey = p[K.whisperKey] ?: d.whisperKey,
+            whisperModel = p[K.whisperModel] ?: d.whisperModel,
         )
     }
 

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nova.player.data.*
@@ -49,7 +50,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx = app.applicationContext
     private val dao = NovaDb.get(ctx).dao()
 
-    val settings = SettingsRepo(ctx).flow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+    private val repo = SettingsRepo(ctx)
+    val settings = repo.flow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
 
     val engineFlow = MutableStateFlow<PlayerEngine?>(null)
     val playback: StateFlow<EngineState> = engineFlow
@@ -110,7 +112,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         thumbs.setSource(uri)
         e.load(uri, start, userSpeed)
         e.setEnhance(_ui.value.enhance)
-        e.setSubtitleStyle(subColorInt(s.subColor), subBgInt(s.subBg), s.subBottom)
+        e.setSubtitleStyle(subColorInt(s.subColor), subBgInt(s.subBg), s.subBottom, s.subPosMode == 1)
         e.setResize(resize)
         e.setVolumeBoost(100)
         e.setSkipSilence(s.skipSilence)
@@ -139,6 +141,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun startTickers() {
+        // live-apply subtitle appearance/position changes made from the player sheets
+        viewModelScope.launch {
+            settings.collect { s ->
+                engine?.setSubtitleStyle(subColorInt(s.subColor), subBgInt(s.subBg), s.subBottom, s.subPosMode == 1)
+                engine?.setSubtitleScale(s.subScale)
+            }
+        }
         // A-B loop
         viewModelScope.launch {
             while (true) {
@@ -356,14 +365,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun generateSubs(lang: String) {
+    /** [cloud] = Whisper API (needed for Tamil/Malayalam); otherwise offline Vosk. */
+    fun generateSubs(lang: String, cloud: Boolean) {
         val uri = playlist.getOrNull(index)?.first ?: return
+        val s = settings.value
         viewModelScope.launch {
             try {
-                busy("Preparing speech model…")
-                val dir = ModelManager(ctx).ensure(lang) { busy(it) }
-                busy("Transcribing 0%")
-                val cues = Transcriber.transcribe(ctx, uri, dir) { busy("Transcribing ${(it * 100).toInt()}%") }
+                val cues = if (cloud) {
+                    if (s.whisperKey.isBlank()) { hud("Add your Whisper API key in Settings"); return@launch }
+                    CloudWhisper.transcribe(ctx, uri, s.whisperUrl, s.whisperKey, s.whisperModel, lang) { busy(it) }
+                } else {
+                    busy("Preparing speech model…")
+                    val dir = ModelManager(ctx).ensure(lang) { busy(it) }
+                    busy("Transcribing 0%")
+                    Transcriber.transcribe(ctx, uri, dir) { busy("Transcribing ${(it * 100).toInt()}%") }
+                }
                 if (cues.isEmpty()) { hud("No speech found"); return@launch }
                 val f = File(ctx.cacheDir, "auto_${System.nanoTime()}_$lang.srt").apply { writeText(toSrt(cues)) }
                 useSubtitle(f)
@@ -435,4 +451,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun castToggle() = cast.toggle()
     fun castStop() = cast.stop()
+
+    // ---------- persisted preferences (used by in-player quick settings) ----------
+
+    fun <T> setPref(key: Preferences.Key<T>, value: T) { viewModelScope.launch { repo.set(key, value) } }
 }

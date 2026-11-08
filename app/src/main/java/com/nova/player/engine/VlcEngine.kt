@@ -48,9 +48,22 @@ class VlcEngine(private val ctx: Context) : PlayerEngine {
         }
     }
 
+    /** Reflection keeps this compiling even if libVLC changes the track class. */
+    private fun videoDims(): Pair<Int, Int> = runCatching {
+        val t = mp.javaClass.getMethod("getCurrentVideoTrack").invoke(mp) ?: return@runCatching 0 to 0
+        val w = t.javaClass.getField("width").getInt(t)
+        val h = t.javaClass.getField("height").getInt(t)
+        val num = t.javaClass.getField("sarNum").getInt(t)
+        val den = t.javaClass.getField("sarDen").getInt(t)
+        (if (num > 0 && den > 0) w * num / den else w) to h
+    }.getOrDefault(0 to 0)
+
     private fun publish() {
+        val (vw, vh) = videoDims()
         _state.update {
             it.copy(
+                videoWidth = vw,
+                videoHeight = vh,
                 playing = mp.isPlaying,
                 speed = mp.rate,
                 audio = tracks(mp.audioTracks, mp.audioTrack),
@@ -94,7 +107,7 @@ class VlcEngine(private val ctx: Context) : PlayerEngine {
     override fun setSubtitleDelay(ms: Long) { mp.setSpuDelay(ms * 1000) }
     override fun setAudioDelay(ms: Long) { mp.setAudioDelay(ms * 1000) }
     override fun setSubtitleScale(scale: Float) {}
-    override fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float) {} // libass renders ASS natively
+    override fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float, autoPosition: Boolean) {} // libVLC positions subtitles itself
     override fun setEnhance(e: Enhance) {}
 
     override fun setResize(mode: ResizeMode) {
@@ -111,10 +124,12 @@ class VlcEngine(private val ctx: Context) : PlayerEngine {
     override fun setVolumeBoost(percent: Int) { mp.volume = percent.coerceIn(0, caps.maxBoost) }
 
     override fun stepFrame(forward: Boolean) {
-    mp.pause()
-    val delta = if (forward) 42L else -42L
-    mp.time = (mp.time + delta).coerceAtLeast(0L)
-}
+        mp.pause()
+        if (forward) {
+            runCatching { mp.javaClass.getMethod("nextFrame").invoke(mp) }
+                .onFailure { mp.time = mp.time + 42 }
+        } else mp.time = (mp.time - 42).coerceAtLeast(0)
+    }
 
     override fun release() {
         runCatching { mp.stop() }

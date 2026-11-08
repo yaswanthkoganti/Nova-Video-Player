@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.*
 import androidx.media3.common.text.CueGroup
@@ -53,7 +54,10 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
     private var enhanceInstalled = false
     var title: String = ""
     val exoPlayer: ExoPlayer get() = player
-    private val subStyle = mutableStateOf(Triple(Color.WHITE, Color.TRANSPARENT, 0.08f))
+    private data class SubStyle(val color: Int, val bg: Int, val bottom: Float, val auto: Boolean)
+    private val subStyle = mutableStateOf(SubStyle(Color.WHITE, Color.TRANSPARENT, 0.08f, true))
+    private val videoDims = mutableStateOf(0 to 0)
+    private val viewDims = mutableStateOf(0 to 0)
     private var boost = 100
     private var current: Uri? = null
     private val extraSubs = mutableListOf<Uri>()
@@ -64,6 +68,7 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
         override fun onPlaybackStateChanged(playbackState: Int) = publish()
         override fun onIsPlayingChanged(isPlaying: Boolean) = publish()
         override fun onTracksChanged(tracks: Tracks) = publish()
+        override fun onVideoSizeChanged(videoSize: VideoSize) = publish()
         override fun onPlaybackParametersChanged(p: PlaybackParameters) = publish()
         override fun onAudioSessionIdChanged(audioSessionId: Int) = rebuildEnhancer(audioSessionId)
         override fun onPlayerError(error: PlaybackException) {
@@ -92,6 +97,12 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
 
     private fun publish() {
         val tr = player.currentTracks
+        val vs = player.videoSize
+        val swap = vs.unappliedRotationDegrees % 180 != 0
+        val dw = (vs.width * (if (vs.pixelWidthHeightRatio > 0f) vs.pixelWidthHeightRatio else 1f)).toInt()
+        val effW = if (swap) vs.height else dw
+        val effH = if (swap) dw else vs.height
+        videoDims.value = effW to effH
         _state.update {
             it.copy(
                 playing = player.isPlaying,
@@ -102,6 +113,8 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
                 audio = list(tr, C.TRACK_TYPE_AUDIO),
                 subs = list(tr, C.TRACK_TYPE_TEXT),
                 ended = player.playbackState == Player.STATE_ENDED,
+                videoWidth = effW,
+                videoHeight = effH,
             )
         }
     }
@@ -210,8 +223,8 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
     override fun setAudioDelay(ms: Long) {}
 
     override fun setSubtitleScale(scale: Float) { subScale.value = scale }
-    override fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float) {
-        subStyle.value = Triple(color, bgColor, bottomFraction)
+    override fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float, autoPosition: Boolean) {
+        subStyle.value = SubStyle(color, bgColor, bottomFraction, autoPosition)
     }
 
     override fun setEnhance(e: Enhance) {
@@ -247,6 +260,8 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
         val mode by resize
         val scale by subScale
         val style by subStyle
+        val vdims by videoDims
+        val view by viewDims
         val boxMod = when (mode) {
             ResizeMode.R16_9 -> Modifier.aspectRatio(16 / 9f)
             ResizeMode.R4_3 -> Modifier.aspectRatio(4 / 3f)
@@ -254,7 +269,7 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
         }
         Box(modifier, contentAlignment = Alignment.Center) {
             AndroidView(
-                modifier = boxMod,
+                modifier = boxMod.onSizeChanged { viewDims.value = it.width to it.height },
                 factory = { c ->
                     PlayerView(c).apply {
                         useController = false
@@ -273,9 +288,14 @@ class Media3Engine(private val ctx: Context) : PlayerEngine {
                         else -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                     }
                     v.subtitleView?.apply {
-                        setStyle(CaptionStyleCompat(style.first, style.second, Color.TRANSPARENT,
+                        setStyle(CaptionStyleCompat(style.color, style.bg, Color.TRANSPARENT,
                             CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null))
-                        setBottomPaddingFraction(style.third)
+                        setBottomPaddingFraction(
+                            subtitleBottomFraction(
+                                style.auto, style.bottom, mode == ResizeMode.FIT,
+                                vdims.first, vdims.second, view.first, view.second,
+                            )
+                        )
                         setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale)
                     }
                 },

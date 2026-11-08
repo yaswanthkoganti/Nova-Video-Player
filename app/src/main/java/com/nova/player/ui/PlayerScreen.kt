@@ -42,7 +42,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.mediarouter.app.MediaRouteButton
 import com.google.android.gms.cast.framework.CastButtonFactory
+import androidx.compose.ui.graphics.luminance
+import com.nova.player.data.K
 import com.nova.player.data.Langs
+import com.nova.player.data.Settings
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -56,6 +59,8 @@ fun PlayerScreen(vm: PlayerViewModel, act: PlayerActivity) {
     val ui by vm.ui.collectAsState()
     val cfg by vm.settings.collectAsState()
     val thumb by vm.thumb.collectAsState()
+    val accent = if (cfg.controlColor == 0) MaterialTheme.colorScheme.primary else Color(cfg.controlColor)
+    val seekAccent = if (cfg.seekColor == 0) accent else Color(cfg.seekColor)
     val scope = rememberCoroutineScope()
 
     val cfgS by rememberUpdatedState(cfg)
@@ -183,7 +188,7 @@ fun PlayerScreen(vm: PlayerViewModel, act: PlayerActivity) {
         AnimatedVisibility(
             visible = ui.controlsVisible && !ui.pip && !ui.locked,
             enter = fadeIn(), exit = fadeOut(),
-        ) { Controls(vm, pb, ui, act, thumb) { sheet = it } }
+        ) { Controls(vm, pb, ui, act, thumb, accent, seekAccent) { sheet = it } }
 
         if (ui.locked && ui.controlsVisible && !ui.pip) {
             IconButton(
@@ -212,7 +217,7 @@ fun PlayerScreen(vm: PlayerViewModel, act: PlayerActivity) {
 
         val e = engine
         if (sheet != null && e != null) {
-            SheetContent(sheet!!, vm, e, pb, ui, onOpen = { sheet = it }) { sheet = null }
+            SheetContent(sheet!!, vm, e, pb, ui, cfg, onOpen = { sheet = it }) { sheet = null }
         }
     }
 }
@@ -239,8 +244,12 @@ private fun CastButton() {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: PlayerActivity, thumb: Bitmap?, onSheet: (Sheet) -> Unit) {
+private fun Controls(
+    vm: PlayerViewModel, pb: EngineState, ui: UiState, act: PlayerActivity, thumb: Bitmap?,
+    accent: Color, seekAccent: Color, onSheet: (Sheet) -> Unit,
+) {
     val white = Color.White
+    val onAccent = if (accent.luminance() > 0.5f) Color.Black else Color.White
     // Expressive shape morph: the play button squares off while playing.
     val corner by animateFloatAsState(if (pb.playing) 30f else 50f, MaterialTheme.motionScheme.defaultSpatialSpec<Float>(), label = "playMorph")
     Box(
@@ -258,7 +267,7 @@ private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: Pla
             IconButton({ onSheet(Sheet.TRACKS) }) { Icon(Icons.Default.Subtitles, "Audio & subtitles", tint = white) }
             IconButton({ onSheet(Sheet.SPEED) }) { Icon(Icons.Default.Speed, "Speed", tint = white) }
             IconButton({ onSheet(Sheet.ENHANCE) }) {
-                Icon(Icons.Default.AutoFixHigh, "Enhance video", tint = if (!ui.enhance.isIdentity) MaterialTheme.colorScheme.primary else white)
+                Icon(Icons.Default.AutoFixHigh, "Enhance video", tint = if (!ui.enhance.isIdentity) accent else white)
             }
             IconButton({ onSheet(Sheet.MORE) }) { Icon(Icons.Default.MoreVert, "More", tint = white) }
         }
@@ -269,6 +278,7 @@ private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: Pla
                 onClick = { vm.togglePlay() },
                 modifier = Modifier.size(84.dp),
                 shape = RoundedCornerShape(corner.coerceIn(0f, 50f).roundToInt()),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = onAccent),
             ) {
                 Icon(if (pb.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", modifier = Modifier.size(44.dp))
             }
@@ -285,7 +295,7 @@ private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: Pla
                             val shape = RoundedCornerShape(20.dp)
                             Image(
                                 thumb.asImageBitmap(), null,
-                                Modifier.height(96.dp).clip(shape).border(2.dp, MaterialTheme.colorScheme.primary, shape),
+                                Modifier.height(96.dp).clip(shape).border(2.dp, seekAccent, shape),
                             )
                         }
                         Text(fmtTime(prev), color = white, style = MaterialTheme.typography.labelLarge)
@@ -300,6 +310,10 @@ private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: Pla
                     onValueChange = { vm.previewSeek((it * pb.durationMs).toLong()) },
                     onValueChangeFinished = { vm.commitSeek() },
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    colors = SliderDefaults.colors(
+                        thumbColor = seekAccent, activeTrackColor = seekAccent,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                    ),
                 )
                 Text(fmtTime(pb.durationMs), color = white, style = MaterialTheme.typography.labelMedium)
             }
@@ -307,7 +321,7 @@ private fun Controls(vm: PlayerViewModel, pb: EngineState, ui: UiState, act: Pla
                 IconButton({ vm.toggleLock() }) { Icon(Icons.Default.LockOpen, "Lock", tint = white) }
                 IconButton({ vm.stepFrame(false) }) { Icon(Icons.Default.ChevronLeft, "Previous frame", tint = white) }
                 IconButton({ vm.toggleAb() }) {
-                    Icon(Icons.Default.Repeat, "A-B loop", tint = if (ui.abA != null) MaterialTheme.colorScheme.primary else white)
+                    Icon(Icons.Default.Repeat, "A-B loop", tint = if (ui.abA != null) accent else white)
                 }
                 IconButton({ vm.stepFrame(true) }) { Icon(Icons.Default.ChevronRight, "Next frame", tint = white) }
                 IconButton({ vm.cycleResize() }) { Icon(Icons.Default.AspectRatio, "Aspect", tint = white) }
@@ -330,7 +344,7 @@ private fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPoin
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SheetContent(
-    sheet: Sheet, vm: PlayerViewModel, e: PlayerEngine, pb: EngineState, ui: UiState,
+    sheet: Sheet, vm: PlayerViewModel, e: PlayerEngine, pb: EngineState, ui: UiState, cfg: Settings,
     onOpen: (Sheet) -> Unit, onDismiss: () -> Unit,
 ) {
     val bookmarks by vm.bookmarks.collectAsState()
@@ -354,6 +368,18 @@ private fun SheetContent(
                         "Subtitle/audio delay needs libVLC — switch engine under More.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    SectionTitle("Subtitle position")
+                    Chips(listOf("Fixed", "Auto (follow video)"), cfg.subPosMode) { vm.setPref(K.subPosMode, it) }
+                    LabeledSlider(
+                        if (cfg.subPosMode == 1) "Height above video edge" else "Height above screen bottom",
+                        cfg.subBottom, 0f..0.4f,
+                    ) { vm.setPref(K.subBottom, (it * 100).roundToInt() / 100f) }
+                    Text(
+                        if (cfg.subPosMode == 1) "Auto: with letterboxed films (e.g. 2.39:1) subtitles move into the black bar; otherwise they sit just above the picture's bottom edge."
+                        else "Fixed: always the same distance from the screen bottom.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (e.caps.subtitleDelay) Text("Position controls apply to the Media3 engine; libVLC places subtitles itself.", style = MaterialTheme.typography.bodySmall)
                 }
                 Sheet.SPEED -> {
                     SectionTitle("Playback speed: ${"%.2f".format(pb.speed)}x")
@@ -437,7 +463,9 @@ private fun SheetContent(
                     }
                 }
                 Sheet.SUBS -> {
-                    val gen = Langs.gen.entries.toList()
+                    val gen = Langs.cloud.entries.toList()
+                    var useCloud by remember { mutableStateOf(false) }
+                    val searchNames = Langs.search.map { it.second }
                     var genI by remember { mutableIntStateOf(0) }
                     var from by remember { mutableIntStateOf(0) }
                     var to by remember { mutableIntStateOf(1) }
@@ -458,8 +486,19 @@ private fun SheetContent(
                             "services and there is no punctuation. Long videos take a while.",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Chips(gen.map { it.value.first }, genI) { genI = it }
-                    Button({ vm.generateSubs(gen[genI].key) }, enabled = ui.busy == null) { Text("Generate subtitles") }
+                    Chips(gen.map { it.value }, genI) { genI = it }
+                    val code = gen[genI].key
+                    val offlineOk = code in Langs.gen
+                    val cloud = useCloud || !offlineOk
+                    Text("Method", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    Chips(listOf("Offline (Vosk)", "Cloud (Whisper API)"), if (cloud) 1 else 0) { useCloud = it == 1 }
+                    if (!offlineOk) Text(
+                        "No offline model exists for ${gen[genI].value}, so Whisper (cloud) is used. Set your API key in Settings. " +
+                            "The audio is uploaded to the service you configure.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    else if (cloud) Text("Audio is uploaded to the Whisper service configured in Settings.", style = MaterialTheme.typography.bodySmall)
+                    Button({ vm.generateSubs(code, cloud) }, enabled = ui.busy == null) { Text("Generate subtitles") }
 
                     SectionTitle("Translate current subtitle (on device)")
                     if (!ui.hasSub) Text("Load, generate or download a subtitle first.", style = MaterialTheme.typography.bodySmall)
@@ -473,8 +512,8 @@ private fun SheetContent(
                     ) { Text("Translate") }
 
                     SectionTitle("Search online (OpenSubtitles)")
-                    Chips(trNames, osI) { osI = it }
-                    Button({ vm.searchSubs(Langs.tr[osI].first) }, enabled = ui.busy == null) { Text("Search") }
+                    Chips(searchNames, osI) { osI = it }
+                    Button({ vm.searchSubs(Langs.search[osI].first) }, enabled = ui.busy == null) { Text("Search") }
                     ui.subResults.forEach { r ->
                         ListItem(
                             headlineContent = { Text(r.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -499,6 +538,11 @@ private fun SheetContent(
                         Text("Skip silence", Modifier.weight(1f))
                         Switch(ui.skipSilence, { vm.setSkipSilence(it) })
                     }
+                    SectionTitle("Player colours")
+                    Text("Controls (play button, active icons)", style = MaterialTheme.typography.labelLarge)
+                    ColorSwatches(cfg.controlColor) { vm.setPref(K.controlColor, it) }
+                    Text("Seek bar", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
+                    ColorSwatches(cfg.seekColor) { vm.setPref(K.seekColor, it) }
                     SectionTitle("Engine")
                     val other = if (ui.engineName == "libVLC") "Media3" else "libVLC"
                     Button({ vm.switchEngine(); onDismiss() }) { Text("Playing with ${ui.engineName} · switch to $other") }

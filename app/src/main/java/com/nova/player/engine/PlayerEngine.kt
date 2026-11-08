@@ -61,6 +61,8 @@ data class EngineState(
     val subs: List<Track> = emptyList(),
     val ended: Boolean = false,
     val error: EngineError? = null,
+    val videoWidth: Int = 0,    // display size (pixel-aspect corrected)
+    val videoHeight: Int = 0,
 )
 
 /** Common contract implemented by the Media3 and libVLC back-ends. */
@@ -81,7 +83,7 @@ interface PlayerEngine {
     fun setSubtitleDelay(ms: Long)
     fun setAudioDelay(ms: Long)
     fun setSubtitleScale(scale: Float)
-    fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float)
+    fun setSubtitleStyle(color: Int, bgColor: Int, bottomFraction: Float, autoPosition: Boolean)
     fun setEnhance(e: Enhance)
     fun setResize(mode: ResizeMode)
     fun setSkipSilence(on: Boolean)

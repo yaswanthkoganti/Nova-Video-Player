@@ -54,14 +54,28 @@ fun SettingsScreen(repo: SettingsRepo, s: Settings, onBack: () -> Unit) {
             SwitchRow("Skip silence (Media3)", s.skipSilence) { set(K.skipSilence, it) }
             SwitchRow("Auto picture-in-picture", s.autoPip) { set(K.autoPip, it) }
             SwitchRow("Background audio (keep playing when you leave)", s.backgroundAudio) { set(K.bgAudio, it) }
+            Text("Start orientation", Modifier.padding(top = 8.dp))
+            Chips(listOf("Auto-rotate", "Always landscape", "Match video"), s.orientation) { set(K.orientation, it) }
+
+            SectionTitle("Player colours")
+            Text("Controls (play button, active icons)")
+            ColorSwatches(s.controlColor, withHue = true) { set(K.controlColor, it) }
+            Text("Seek bar (blank \"A\" follows the controls colour)", Modifier.padding(top = 12.dp))
+            ColorSwatches(s.seekColor, withHue = true) { set(K.seekColor, it) }
 
             SectionTitle("Subtitles")
+            Text("Position")
+            Chips(listOf("Fixed", "Auto (follow video aspect ratio)"), s.subPosMode) { set(K.subPosMode, it) }
+            Text(
+                "Auto moves subtitles into the black bar of letterboxed films and otherwise keeps them just above the picture's bottom edge. Applies to the Media3 engine.",
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp),
+            )
             Slide("Size: ${(s.subScale * 100).roundToInt()}%", s.subScale, 0.5f..2f, 0) { set(K.subScale, (it * 20).roundToInt() / 20f) }
             Text("Colour", Modifier.padding(top = 8.dp))
             Chips(listOf("White", "Yellow", "Cyan", "Green"), s.subColor) { set(K.subColor, it) }
             Text("Background", Modifier.padding(top = 8.dp))
             Chips(listOf("None", "Translucent", "Solid"), s.subBg) { set(K.subBg, it) }
-            Slide("Vertical position: ${(s.subBottom * 100).roundToInt()}%", s.subBottom, 0f..0.4f, 0) { set(K.subBottom, (it * 100).roundToInt() / 100f) }
+            Slide("Height above ${if (s.subPosMode == 1) "video edge" else "screen bottom"}: ${(s.subBottom * 100).roundToInt()}%", s.subBottom, 0f..0.4f, 0) { set(K.subBottom, (it * 100).roundToInt() / 100f) }
 
             SectionTitle("OpenSubtitles (online subtitle search)")
             Text("Create a free account and API key at opensubtitles.com. Stored only on this device.", style = MaterialTheme.typography.bodySmall)
@@ -71,6 +85,20 @@ fun SettingsScreen(repo: SettingsRepo, s: Settings, onBack: () -> Unit) {
             OutlinedTextField(key, { key = it; set(K.osKey, it) }, label = { Text("API key") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             OutlinedTextField(usr, { usr = it; set(K.osUser, it) }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             OutlinedTextField(pwd, { pwd = it; set(K.osPass, it) }, label = { Text("Password") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+
+            SectionTitle("Cloud transcription (Whisper API)")
+            Text(
+                "Needed for Tamil and Malayalam subtitles (no offline model exists) and optional for others. Works with OpenAI " +
+                    "(https://api.openai.com/v1, whisper-1) or Groq (https://api.groq.com/openai/v1, whisper-large-v3-turbo). " +
+                    "Audio is uploaded to that service (~10 MB per 5 minutes).",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            var wUrl by remember(s.whisperUrl) { mutableStateOf(s.whisperUrl) }
+            var wKey by remember(s.whisperKey) { mutableStateOf(s.whisperKey) }
+            var wModel by remember(s.whisperModel) { mutableStateOf(s.whisperModel) }
+            OutlinedTextField(wUrl, { wUrl = it; set(K.whisperUrl, it) }, label = { Text("Base URL") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            OutlinedTextField(wModel, { wModel = it; set(K.whisperModel, it) }, label = { Text("Model") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            OutlinedTextField(wKey, { wKey = it; set(K.whisperKey, it) }, label = { Text("API key") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             Spacer(Modifier.height(32.dp))
         }
     }

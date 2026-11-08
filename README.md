@@ -1,4 +1,4 @@
-# Nova Player v0.2
+# Nova Player v0.3
 
 Android video player: VLC-class format coverage + MX-style gestures, Material 3 Expressive UI.
 Kotlin · Jetpack Compose (Material 3 Expressive) · Media3 + libVLC · Room · DataStore.
@@ -33,10 +33,20 @@ Expect to fix a handful of compile errors on first build (unverified API names, 
 | **DLNA/UPnP** discovery + browse + play | done |
 | **Chromecast** (local files served via built-in HTTP server) | done |
 
+## New in v0.3
+- **Subtitle position:** Fixed, or Auto (follows the video's aspect ratio: letterboxed films get subtitles in the black bar,
+  otherwise just above the picture's bottom edge). Height slider in Settings and in the player's audio/subtitle sheet. Media3 engine only.
+- **Start orientation:** Auto-rotate / Always landscape / Match video (Settings → Playback).
+- **Subtitle generation for Telugu, Tamil, Malayalam** (plus Kannada, Bengali, Marathi, Arabic, Korean, Turkish).
+  Telugu has an offline Vosk model; Tamil and Malayalam have none, so they use a Whisper API (OpenAI/Groq/any OpenAI-compatible) with your key.
+- **Player colours:** separate accent colour for the controls and the seek bar (12 swatches + custom hue), in Settings and in the player's More sheet.
+- **New adaptive app icon** (vector + themed monochrome + legacy PNGs).
+- Unit tests for SRT, natural sorting, time formatting, video enhancement presets and subtitle-position logic (run in CI).
+
 ## Known limits / risks
 - Not compiled or tested on a device. Material 3 `1.4.0-alpha15`, Media3 `GlProgram`/`BaseGlShaderProgram`, libVLC
   `nextFrame()`, jcifs-ng and Vosk model URLs are from memory and may need adjusting.
-- Auto-subtitles use Vosk, not Whisper: lower accuracy, no punctuation. Whisper.cpp needs an NDK build (not included).
+- Offline auto-subtitles use Vosk (model names in `Langs.gen` are from memory; check alphacephei.com/vosk/models): lower accuracy, no punctuation. Whisper.cpp needs an NDK build (not included).
 - Video enhancement is a GPU filter, not AI super-resolution. It is not available on the libVLC engine.
 - Chromecast plays only formats the receiver supports (MP4/H.264 safest); smb:// sources can't be cast.
 - Background audio stops if Android kills the app; the player state lives in the activity's ViewModel.

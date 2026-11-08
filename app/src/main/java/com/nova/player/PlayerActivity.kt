@@ -19,6 +19,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import com.nova.player.data.SettingsRepo
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import com.nova.player.ui.NovaTheme
 import com.nova.player.ui.PlayerScreen
 import com.nova.player.ui.PlayerViewModel
@@ -36,6 +43,18 @@ class PlayerActivity : FragmentActivity() {
             registerForActivityResult(ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val uri = intent?.data ?: run { finish(); return }
+
+        // Start orientation. Read synchronously (tiny DataStore read) so there is no portrait flash.
+        val orientation = runBlocking { SettingsRepo(applicationContext).flow.first().orientation }
+        when (orientation) {
+            1 -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            2 -> lifecycleScope.launch {
+                vm.playback.map { it.videoWidth to it.videoHeight }.distinctUntilChanged().collect { (w, h) ->
+                    if (w > 0 && h > 0) requestedOrientation =
+                        if (w >= h) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                }
+            }
+        }
         vm.open(uri)
         setContent {
             val st by vm.settings.collectAsState()
