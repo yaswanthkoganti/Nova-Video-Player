@@ -111,9 +111,10 @@ class VlcEngine(private val ctx: Context) : PlayerEngine {
     override fun setVolumeBoost(percent: Int) { mp.volume = percent.coerceIn(0, caps.maxBoost) }
 
     override fun stepFrame(forward: Boolean) {
-        mp.pause()
-        if (forward) runCatching { mp.nextFrame() } else mp.time = (mp.time - 42).coerceAtLeast(0)
-    }
+    mp.pause()
+    val delta = if (forward) 42L else -42L
+    mp.time = (mp.time + delta).coerceAtLeast(0L)
+}
 
     override fun release() {
         runCatching { mp.stop() }
